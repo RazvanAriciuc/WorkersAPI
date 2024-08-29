@@ -40,6 +40,13 @@ public class WorkerRestController {
         dao.create(worker);
     }
 
+    @PutMapping("/updateEmployee")
+    @Transactional
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void updateEmployee(@RequestBody Worker worker, @RequestParam int id) {
+        dao.update(worker, id);
+    }
+
 
     @GetMapping("/hello")
     public void sayHello() {

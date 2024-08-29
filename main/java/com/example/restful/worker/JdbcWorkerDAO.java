@@ -77,9 +77,22 @@ public class JdbcWorkerDAO implements WorkerDAO{
                 worker.getBirthDate());
     }
 
+    // Consider a different approach. Maybe a Functional approach with Combinator Pattern.
     @Override
     public void update(Worker worker, int id) {
-        // tbd
+       String sql = "UPDATE workers SET age = ?, firstName = ?, lastName = ?, workPlace = ?, city = ?, country = ?, birthDate = ? WHERE worker_id = ?";
+
+       Worker updatedWorker = new Worker(id, worker.getAge(), worker.getFirstName(), worker.getLastName(), worker.getWorkPlace(), worker.getCity(), worker.getCountry(), worker.getBirthDate());
+
+       jdbcTemplate.update(sql,
+               updatedWorker.getAge(),
+               updatedWorker.getFirstName(),
+               updatedWorker.getLastName(),
+               updatedWorker.getWorkPlace(),
+               updatedWorker.getCity(),
+               updatedWorker.getCountry(),
+               updatedWorker.getBirthDate(),
+               id);
     }
 
     @Override
