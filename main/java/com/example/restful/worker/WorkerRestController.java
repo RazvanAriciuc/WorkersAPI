@@ -1,11 +1,12 @@
 package com.example.restful.worker;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Optional;
+import java.util.NoSuchElementException;
 
 @RestController
 @RequestMapping("/worker")
@@ -18,20 +19,20 @@ public class WorkerRestController {
     }
 
     @GetMapping("/printAll")
-    public List<Worker> findAll(){
-        return dao.findAll();
+    public ResponseEntity<List<Worker>> findAll(){
+        List<Worker> workers = dao.findAll();
+        return new ResponseEntity<>(workers, HttpStatus.OK);
     }
 
     @GetMapping("/findById")
-    public Optional<Worker> findById(@RequestParam int id) {
-        return dao.findById(id);
+    public ResponseEntity<Worker> findById(@RequestParam int id) {
+        return dao.findById(id).map(ResponseEntity::ok).orElseThrow(() -> new NoSuchElementException("Worker not found with id: " + id));
     }
 
     @GetMapping("/findByName")
-    public Optional<Worker> findByName(@RequestParam String last_name) {
-        return dao.findByName(last_name);
+    public ResponseEntity<Worker> findByName(@RequestParam String last_name) {
+        return dao.findByName(last_name).map(ResponseEntity::ok).orElseThrow(() -> new NoSuchElementException("Worker not found with last name: " + last_name));
     }
-
 
     @PostMapping("/addEmployee")
     @Transactional
@@ -52,10 +53,5 @@ public class WorkerRestController {
     @ResponseStatus(HttpStatus.OK)
     public void deleteEmployee(@RequestParam int id){
         dao.delete(id);
-    }
-
-    @GetMapping("/hello")
-    public void sayHello() {
-        System.out.println("Hello world");
     }
 }
