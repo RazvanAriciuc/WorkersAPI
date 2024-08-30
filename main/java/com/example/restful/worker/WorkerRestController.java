@@ -47,6 +47,12 @@ public class WorkerRestController {
         dao.update(worker, id);
     }
 
+    @DeleteMapping("/deleteEmployee")
+    @Transactional
+    @ResponseStatus(HttpStatus.OK)
+    public void deleteEmployee(@RequestParam int id){
+        dao.delete(id);
+    }
 
     @GetMapping("/hello")
     public void sayHello() {

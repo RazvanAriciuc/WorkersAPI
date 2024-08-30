@@ -1,5 +1,8 @@
 package com.example.restful.worker;
 
+import com.google.common.cache.Cache;
+import jakarta.annotation.PostConstruct;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.SimpleJdbcInsert;
@@ -12,15 +15,10 @@ import java.util.*;
 public class JdbcWorkerDAO implements WorkerDAO{
 
     private static final long counter = 0;
-    private JdbcTemplate jdbcTemplate;
-    private SimpleJdbcInsert insertWorker;
-
-    public JdbcWorkerDAO(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-        insertWorker = new SimpleJdbcInsert(jdbcTemplate).withTableName("workers").usingGeneratedKeyColumns("worker_id");
-    }
-
-    RowMapper<Worker> rowMapper = (rs, rowNum) -> new Worker(
+    private final JdbcTemplate jdbcTemplate;
+    private final SimpleJdbcInsert insertWorker;
+    private final Cache<Integer, Worker> cache;
+    private final RowMapper<Worker> rowMapper = (rs, rowNum) -> new Worker(
             rs.getInt("worker_id"),
             rs.getInt("age"),
             rs.getString("firstName"),
@@ -31,28 +29,47 @@ public class JdbcWorkerDAO implements WorkerDAO{
             rs.getDate("birthDate")
     );
 
-
-    @Override
-    public List<Worker> findAll() {
-        String sql = "SELECT * FROM workers";
-        return jdbcTemplate.query(sql, rowMapper);
+    public JdbcWorkerDAO(JdbcTemplate jdbcTemplate, Cache<Integer, Worker> cache) {
+        this.cache = cache;
+        this.jdbcTemplate = jdbcTemplate;
+        insertWorker = new SimpleJdbcInsert(jdbcTemplate).withTableName("workers").usingGeneratedKeyColumns("worker_id");
     }
 
     @Override
-    public Optional<Worker> findById(int worker_id) {
-        String sql = "SELECT * FROM workers WHERE worker_id = ?";
-        return Optional.ofNullable(jdbcTemplate.queryForObject(sql, rowMapper, worker_id));
+    public List<Worker> findAll() {
+        return cache.asMap().values().stream().toList();
+    }
+
+    @Override
+    public Optional<Worker> findById(int id) {
+        return Optional.ofNullable(cache.getIfPresent(id)).or(() -> {
+            try{
+                String sql = "SELECT * FROM workers WHERE worker_id = ?";
+                Worker worker = jdbcTemplate.queryForObject(sql, rowMapper, id);
+                return Optional.ofNullable(worker);
+            } catch (EmptyResultDataAccessException e) {
+                return Optional.empty();
+            }
+        });
     }
 
     @Override
     public Optional<Worker> findByName(String last_name) {
-        String sql = "SELECT * FROM workers WHERE lastName = ?";
-        return Optional.ofNullable(jdbcTemplate.queryForObject(sql, rowMapper, last_name));
+
+        return cache.asMap().values().stream().filter(worker -> last_name.equals(worker.getLastName())).findAny().or(() -> {
+            try{
+                String sql = "SELECT * FROM workers WHERE lastName = ?";
+                Worker worker = jdbcTemplate.queryForObject(sql, rowMapper, last_name);
+                return Optional.ofNullable(worker);
+            } catch (EmptyResultDataAccessException e) {
+                return Optional.empty();
+            }
+        });
     }
 
     //Normally I would return Void here, but I want to Cache the Worker after it's added to the DB, at runtime
     @Override
-    public Worker create(Worker worker) {
+    public void create(Worker worker) {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("age", worker.getAge());
         parameters.put("firstName", worker.getFirstName());
@@ -66,7 +83,8 @@ public class JdbcWorkerDAO implements WorkerDAO{
         // Convert BigInteger to Integer
         int workerId = (id_worker instanceof BigInteger) ? ((BigInteger) id_worker).intValue() : (Integer) id_worker;
 
-        return new Worker(
+        //Cache the new entry after it was added to the DB to keep the Cache up to date
+        cache.put(workerId, new Worker(
                 workerId,
                 worker.getAge(),
                 worker.getFirstName(),
@@ -74,14 +92,13 @@ public class JdbcWorkerDAO implements WorkerDAO{
                 worker.getWorkPlace(),
                 worker.getCity(),
                 worker.getCountry(),
-                worker.getBirthDate());
+                worker.getBirthDate()));
     }
 
     // Consider a different approach. Maybe a Functional approach with Combinator Pattern.
     @Override
     public void update(Worker worker, int id) {
        String sql = "UPDATE workers SET age = ?, firstName = ?, lastName = ?, workPlace = ?, city = ?, country = ?, birthDate = ? WHERE worker_id = ?";
-
        Worker updatedWorker = new Worker(id, worker.getAge(), worker.getFirstName(), worker.getLastName(), worker.getWorkPlace(), worker.getCity(), worker.getCountry(), worker.getBirthDate());
 
        jdbcTemplate.update(sql,
@@ -93,11 +110,19 @@ public class JdbcWorkerDAO implements WorkerDAO{
                updatedWorker.getCountry(),
                updatedWorker.getBirthDate(),
                id);
+       cache.put(id, updatedWorker);
     }
 
     @Override
     public void delete(int id) {
         String sql = "DELETE FROM workers WHERE worker_id = ?";
         jdbcTemplate.update(sql, id);
+        cache.invalidate(id);
+    }
+
+    @PostConstruct
+    private void populateCacheAtStartTime() {
+        List<Worker> workers = jdbcTemplate.query("SELECT * FROM workers", rowMapper);
+        workers.forEach(worker -> cache.put(worker.getId(), worker));
     }
 }

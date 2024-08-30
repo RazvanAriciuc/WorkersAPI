@@ -7,7 +7,7 @@ public interface WorkerDAO {
 
     List<Worker> findAll();
     Optional<Worker> findById(int id);
-    Worker create(Worker worker);
+    void create(Worker worker);
     void update(Worker worker, int id);
     void delete(int id);
     Optional<Worker> findByName(String last_name);
